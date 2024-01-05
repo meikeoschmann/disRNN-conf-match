@@ -1,0 +1,6 @@
+jax
+dm-haiku
+matplotlib
+numpy
+scipy
+pandas
