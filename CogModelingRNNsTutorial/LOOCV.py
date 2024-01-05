@@ -12,8 +12,18 @@ from rnn_utils import DatasetRNN
 matDf = loadmat('data\data_for_Meike.mat')['data']
 features = matDf.dtype.names
 df = pd.DataFrame(np.squeeze(np.array(matDf.tolist())).T, columns=features).drop(columns=['label','Spcorrect1', 'Spcorrect2', 'Snoise']).sort_values(by=['subject', 'trial'])
+
+# for now only partner 1
+df = df[df['type'] == 1]
+
 df['Reward'] = (df['select'] == 1) * df['Sacc'] + (df['select'] == -1) * df['Pacc']
-features = ['dtheta', 'type', 'Pchoice', 'Preport', 'Pacc', 'Schoice', 'Sacc', 'Srt1', 'select', 'Reward', 'Sreport'] 
+df['theta'] = np.absolute(df['dtheta'])
+df['theta_next'] = df['theta'].shift(periods = 1, fill_value = 0)
+df['Sacc_next'] = df['Sacc'].shift(periods = 1, fill_value = 0)
+
+# features = ['block', 'theta', 'theta_next', 'Preport', 'Pacc', 'Schoice', 'Sacc', 'Sacc_next', 'select', 'Reward', 'Sreport'] 
+features = ['theta', 'Preport', 'Pacc', 'Schoice', 'Sacc', 'select', 'Reward', 'Sreport'] 
+
 target = ['Sreport']
 
 
@@ -28,9 +38,9 @@ def main():
 def train_network_LOOCV(leave_out_idx):
     print(f'Leave out subject: {leave_out_idx+1}')
     batch_size = None
-    n_trials = df['trial'].unique().size
     target_size = df['Sreport'].unique().size
     n_sessions = df['subject'].unique().size
+    n_trials = int(len(df) / n_sessions)
     n_blocks = df['block'].unique().size
     features_number = len(features)
 
@@ -54,19 +64,19 @@ def train_network_LOOCV(leave_out_idx):
     border = int(n_trials / len(df['block'].unique()))
 
     indices_xsTrain = np.arange(0, n_blocks * border, border)
-    indices_xsTest = [0]
     indices_ysTrain = np.arange(border, n_blocks * border, border)
     
     # Add a dummy input at the beginning of each block. First step has a target but no input
     xsTrain_padded_LOOCV = np.insert(xsTrain, indices_xsTrain, np.zeros((1, n_sessions, features_number)), axis=0)
-    xsTest_padded_LOOCV = np.insert(xsTest, indices_xsTest, np.zeros((1, 1, features_number)), axis=0)
+    xsTest_padded_LOOCV = np.insert(xsTest, indices_xsTrain, np.zeros((1, 1, features_number)), axis=0)
 
     # Add a dummy target at the end of each block. Last step has input but no target
     ysTrain_padded_LOOCV  = np.insert(ysTrain, indices_ysTrain, -1*np.ones((1, n_sessions, 1)), axis=0)
-    
+    ysTest_padded_LOOCV = np.insert(ysTest, indices_ysTrain, -1*np.ones((1, 1, 1)), axis=0)
+
     # np.insert inserts before given idx, so the last row we need to append manually
     ysTrain_padded_LOOCV = np.concatenate((ysTrain_padded_LOOCV, -1*np.ones((1,n_sessions,1))), axis=0)
-    ysTest_padded_LOOCV = np.concatenate((ysTest, -1*np.ones((1,1,1))), axis=0)
+    ysTest_padded_LOOCV = np.concatenate((ysTest_padded_LOOCV, -1*np.ones((1,1,1))), axis=0)
 
     train = DatasetRNN(xsTrain_padded_LOOCV, ysTrain_padded_LOOCV, batch_size)
     test = DatasetRNN(xsTest_padded_LOOCV, ysTest_padded_LOOCV, batch_size)
@@ -74,12 +84,14 @@ def train_network_LOOCV(leave_out_idx):
     # Set up the DisRNN
     latent_size = 5    
     obs_size = xsTrain.shape[-1]
-    update_mlp_shape = (5, 5, 5)  #@param
-    choice_mlp_shape = (5, 5, 5)  #@param 
-
+    #update_mlp_shape = (5, 5, 5)#@param
+    update_mlp_shape = (3,3)  
+    #choice_mlp_shape = (5, 5, 5)  #@param 
+    choice_mlp_shape = (2,)
     #update_mlp_shape = (3,3,)  #@param
-    # #@markdown Number of hidden units in each of the two layers of the choice MLP.
+    #Number of hidden units in each of the two layers of the choice MLP.
     #choice_mlp_shape = (2,)
+
     def make_disrnn():
         model = disrnn.HkDisRNN(
         obs_size = obs_size,
@@ -172,7 +184,7 @@ def train_network_LOOCV(leave_out_idx):
     train, make_disrnn_eval, disrnn_params)
     print('Held-Out Dataset')
     testing_likelihood = compute_log_likelihood(
-    train, make_disrnn_eval, disrnn_params)
+    test, make_disrnn_eval, disrnn_params)
 
     return training_likelihood, testing_likelihood
 

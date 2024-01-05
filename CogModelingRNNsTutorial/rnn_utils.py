@@ -214,13 +214,13 @@ def train_model(
     # (n_steps, n_episodes, n_targets)
     model_output = model.apply(params, random_key, xs)
     output_logits = model_output[:, :, :-1]
-    penalty = jnp.sum(model_output[:, :, -1])  # ()
+    penalty = jnp.sum(model_output[:, :, -1]) #! LAST ELEMENT MORE THAN ONE Feature IN OUR CASE!
     loss = (
         categorical_log_likelihood(targets, output_logits)
         + penalty_scale * penalty
     )
     return loss
-
+  
   losses = {
       'categorical': categorical_loss,
       'penalized_categorical': penalized_categorical_loss,
