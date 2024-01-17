@@ -62,6 +62,10 @@ def main():
         train_LL, test_LL = train_network_LOOCV(i)
         likelihoods[i,:] = [train_LL, test_LL]
     print(likelihoods)
+    mean_LL_train = np.mean(likelihoods[:,0])
+    mean_LL_test = np.mean(likelihoods[:,1])
+    print(f'Mean LL train: {mean_LL_train:.3f}')
+    print(f'Mean LL test: {mean_LL_test:.3f}')
     np.savetxt("likelihoods.csv", likelihoods, delimiter=",")
 
 def train_network_LOOCV(leave_out_idx):
@@ -108,6 +112,14 @@ def train_network_LOOCV(leave_out_idx):
     train = DatasetRNN(xsTrain_padded_LOOCV, ysTrain_padded_LOOCV, batch_size)
     test = DatasetRNN(xsTest_padded_LOOCV, ysTest_padded_LOOCV, batch_size)
 
+    # Save test dataset
+    if not os.path.exists('test_datasets_LOOCV'):
+        os.makedirs('test_datasets_LOOCV')
+    with open(f'test_datasets_LOOCV/test_input_{leave_out_idx+1}.pkl', 'wb') as f:
+        pickle.dump(xsTest_padded_LOOCV, f)
+    with open(f'test_datasets_LOOCV/test_target_{leave_out_idx+1}.pkl', 'wb') as f:
+        pickle.dump(ysTest_padded_LOOCV, f)
+    
     # Set up the DisRNN
     latent_size = 5    
     obs_size = xsTrain.shape[-1]
@@ -193,7 +205,7 @@ def train_network_LOOCV(leave_out_idx):
     if not os.path.exists('outputs_LOOCV'):
         os.makedirs('outputs_LOOCV')
     with open(f'outputs_LOOCV/outputs_train_{leave_out_idx+1}.pkl', 'wb') as f:
-        pickle.dump(training_output, f)
+        pickle.dump(test_output, f)
 
     return training_likelihood, testing_likelihood
 
