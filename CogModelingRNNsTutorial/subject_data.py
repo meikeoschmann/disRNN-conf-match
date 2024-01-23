@@ -103,7 +103,6 @@ def shift_df(df, features_prev):
 
 def train_test(df, features, target, leave_out_idx=0, batch_size=None):
 
-    target_size = df['Sconfidence'].unique().size
     n_subjects = df['subject'].unique().size
     n_trials = int(len(df) / n_subjects)
     n_blocks = df['block'].unique().size
@@ -121,9 +120,16 @@ def train_test(df, features, target, leave_out_idx=0, batch_size=None):
     # If subsequent encouter with same partner: Reshape target to fit the shape of ysTrain
     # ysTrain = np.array(target).reshape(n_trials, n_subjects, 1, order='F')
 
-    # The test set consists of the subject that is left out
+    # Experiment: Set SConfidence to 1 in test set
+    sconf_idx = features.index('Sconfidence_previous')
     xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
-    ysTest[:, 0, :] = ysTrain[:, leave_out_idx, :]    
+    xsTest[:, 0, sconf_idx] = 1
+    ysTest[:, 0, :] = 1
+    
+
+    # The test set consists of the subject that is left out
+    #xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
+    #ysTest[:, 0, :] = ysTrain[:, leave_out_idx, :]    
         
     # Exclude leave_out_idx from xsTrain and ysTrain
     xsTrain = np.delete(xsTrain, leave_out_idx, axis=1)
