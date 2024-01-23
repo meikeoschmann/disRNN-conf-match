@@ -1,132 +1,185 @@
 """Functions for loading subject data."""
-import json
-import os
+
 import numpy as np
-import pickle
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.io import loadmat
+import jax
 
-from typing import List, Optional
+import rnn_utils
+from rnn_utils import DatasetRNN
 
-# Do we even need a method for loading a single subject?
-def load_data_for_one_subject(data, subjectID):
-  """Load data for a single subject.
+DATA_DIR = '..\data\data_for_Meike.mat'
 
-  Args:
-    data: array of all the subjects
-    subjectID: ID of the subject (1-30)
+def load_data(data_dir=DATA_DIR):
+    '''Load subject data from matlab file.'''
 
-  Returns:
-    subject_data: n_trials x n_sessions x 8 array of features
-    """
-  if subjectID is None:
-    raise ValueError(f'Subject {subjectID} not found.')
+    if not os.path.exists(data_dir):
+        raise ValueError('Data directory does not exist.')
 
-  subject_xs = data[data[:,0,0] == subjectID, :, :]
-  subject_ys = subject_xs[:, :, 6] # indx 6 is Sreport
+    matDf = loadmat(data_dir)['data']
+    features = matDf.dtype.names
+    df = df = pd.DataFrame(np.squeeze(np.array(matDf.tolist())).T, columns=features).drop(columns=['label','Spcorrect1', 'Spcorrect2', 'Snoise']).sort_values(by=['subject', 'trial'])
 
-  # Delete column containing subject IDs
-  subject_xs = np.delete(subject_xs, 0, axis=2)
-  
-  # Check that the subject data has the right shape
-  assert subject_xs.shape[1] == subject_ys.shape[1] == data.shape[1] # n_sessions
-  assert subject_xs.shape[2] == data.shape[2]-1 # n_features-1
-  n_subjects = np.unique(data[:,:,0]).size
-  assert subject_xs.shape[0] == subject_ys.shape[0] == data.shape[0]/n_subjects # n_trials
-
-  return subject_xs, subject_ys
-
-def format_into_datasets(xs, ys, dataset_constructor):
-  """Format inputs xs and outputs ys into dataset.
-
-  Args:
-    xs: n_trials x n_sessions x 8 array of features
-    ys: n_trials x n_sessions  array of Sreport in subsequent trial
-    dataset_constructor: constructor that accepts xs and ys as arguments; probably
-      use rnn_utils.DatasetRNN
-
-  Returns:
-    dataset_train: a dataset containing even numbered sessions
-    dataset_train: a dataset containing odd numbered sessions
-  """
-  n_sessions = xs.shape[1]
-  n_features = xs.shape[2]
-
-  # Add a dummy input at the beginning. First step has a target but no input
-  xs = np.concatenate(
-        (0. * np.ones((1,n_sessions,n_features)), xs), axis=0
-    )
-  
-  # Add a dummy target at the end -- last step has input but no target
-  ys = np.concatenate(
-    (ys, -1*np.ones((1,n_sessions))), axis=0
-    )
-  
-  n = int(xs.shape[1] // 2) * 2
-  # even numbered sessions
-  dataset_train = dataset_constructor(xs[:, :n:2], ys[:, :n:2]) # batchsize not specified!
-  # odd numbered sessions
-  dataset_test = dataset_constructor(xs[:, 1:n:2], ys[:, 1:n:2])
-  
-  return dataset_train, dataset_test
+    return df
 
 
-# def format_into_datasets(xs, ys, subjectID=None, dataset_constructor):
-#   """Format inputs xs and outputs ys into dataset
-#       and performs LOOCV for given subjectID.
-
-#   Args:
-#     xs: n_trials*n_subjects x n_sessions x 8 array of features
-#     ys: n_trials x n_sessions x 1 array of public confidence in next trial
-#     subjectID: ID of the subject to leave out(1-30)
-#     dataset_constructor: constructor that accepts xs and ys as arguments; probably
-#       use rnn_utils.DatasetRNN
-
-#   Returns:
-#     dataset_trains: a training dataset without subjectID
-#     dataset_test: a testing dataset with only subjectID
-#   """
-  
-#   # Add a dummy input at the beginning. First step has a target but no input
-#   xs = np.concatenate(
-#         (0. * np.ones(xs.shape), xs), axis=1
-#     )
-  
-#   # Add a dummy target at the end -- last step has input but no target
-#   ys = np.concatenate(
-#     (ys, -1*np.ones(ys.shape)), axis=1
-#     )
-#   print(xs.shape)
-#   print(ys.shape)
-#   if subjectID != None:
-#     # Perform LOOCV:
-#     xs_train, xs_test = leave_one_out_cross_validation(subjectID, xs)
-#     ys_train, ys_test = leave_one_out_cross_validation(subjectID, ys)
-
-#   dataset_train = dataset_constructor(xs_train, ys_train)
-#   dataset_test = dataset_constructor(xs_test, ys_test)
-#   return dataset_train, dataset_test
-
-def leave_one_out_cross_validation(subjectID, data):
-    """Creates dataset for LOOCV, leaving out the specified subject.
-
-  Args:
-    subjectID: ID of the subject to leave out(1-30)
-    data: array of all the subjects
-
-  Returns:
-    train_set: array without the subject
-    test_set: array of only the subject
-   """
-    # Exclude the rows corresponding to the current subject
-    # TO DO: make this nicer
-    if data.ndim == 3: # for xs
-      train_set = data[data[:, 0, 0] != subjectID]
-      test_set = data[data[:, 0, 0] == subjectID]
-    elif data.ndim == 1: # for ys
-      train_set = data[data[:] != subjectID]
-      test_set = data[data[:] == subjectID]
-  
-    return train_set, test_set
+def categorical_partners(data, features_prev, features_curr):
+    '''Create one-hot encoding for block and partner type'''
     
+    data['block1'] = data['block'].apply(lambda x: 1 if x == 1 else 0)
+    data['block2'] = data['block'].apply(lambda x: 1 if x == 2 else 0)
+    data['block3'] = data['block'].apply(lambda x: 1 if x == 3 else 0)
+    data['block4'] = data['block'].apply(lambda x: 1 if x == 4 else 0)
+    data['b1_p1'] = data['block1'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
+    data['b1_p2'] = data['block1'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
+    data['b2_p1'] = data['block2'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
+    data['b2_p2'] = data['block2'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
+    data['b3_p1'] = data['block3'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
+    data['b3_p2'] = data['block3'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
+    data['b4_p1'] = data['block4'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
+    data['b4_p2'] = data['block4'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
+
+    features_prev.extend(['b1_p1', 'b1_p2', 'b2_p1', 'b2_p2', 'b3_p1', 'b3_p2', 'b4_p1', 'b4_p2'])
+    features_prev.remove('type')
+    features_curr.extend(['b1_p1', 'b1_p2', 'b2_p1', 'b2_p2', 'b3_p1', 'b3_p2', 'b4_p1', 'b4_p2'])
+    features_curr.remove('type')
+    
+    return data, features_prev, features_curr
+
+
+def target_next_encounter(data):
+    '''Create target based on next encounter with the same partner: 
+    for a given index in the dataframe, find the next index that has the same value for data['type']
+    and add data['Sconfidence'] of that index to the target list'''
+    
+    subject_list = list(data['subject'].unique())
+    target = []
+    Sacc_next = []
+    theta_next = []
+    for i in range(len(data)):
+        for j in range(i+1, len(data)):
+            if data['subject'].iloc[i] == data['subject'].iloc[j] and data['block'].iloc[i] == data['block'].iloc[j] and data['type'].iloc[i] == data['type'].iloc[j]:
+                target.append(data['Sconfidence'].iloc[j])
+                Sacc_next.append(data['Sacc'].iloc[j])
+                theta_next.append(data['theta'].iloc[j])
+                break
+
+            # if the next trial is the first one of the next block, append -1
+            elif data['subject'].iloc[i] == data['subject'].iloc[j] and (data['block'].iloc[i] + 1) == data['block'].iloc[j]:
+                target.append(-1)
+                Sacc_next.append(0)
+                theta_next.append(0)
+                break
+
+            # if the next trial is the first one of the next subject, append -1
+            elif (subject_list.index(data['subject'].iloc[i])+1 < len(subject_list)) and (subject_list[subject_list.index(data['subject'].iloc[i])+1]) == data['subject'].iloc[j] and data['block'].iloc[i] == 4 and data['block'].iloc[j] == 1:
+                target.append(-1)
+                Sacc_next.append(0)
+                theta_next.append(0)
+                break
+    # no target for the last two trials, append -1 twice    
+    target.append(-1)
+    target.append(-1)
+    Sacc_next.append(0)
+    Sacc_next.append(0)
+    theta_next.append(0)
+    theta_next.append(0)
+
+    data['Sacc_next'] = Sacc_next
+    data['theta_next'] = theta_next
+
+    return data, target
+
+def shift_df(df, features_prev): 
+    '''Shift features of previous trial up by one row and rename the features. '''
+    df = df.groupby(['subject', 'block'])[features_prev].shift(-1, fill_value=0)
+    df.columns = [str(col) + '_previous' for col in df.columns]
+    features_prev = [str(col) + '_previous' for col in features_prev]
+
+    return df, features_prev
+
+
+def train_test(df, features, target, leave_out_idx=0, batch_size=None):
+
+    target_size = df['Sconfidence'].unique().size
+    n_subjects = df['subject'].unique().size
+    n_trials = int(len(df) / n_subjects)
+    n_blocks = df['block'].unique().size
+    n_features = len(features)
+
+    xsTrain = np.zeros((n_trials, n_subjects, n_features))
+    ysTrain = np.zeros((n_trials, n_subjects, 1))
+    xsTest = np.zeros((n_trials, 1, n_features))
+    ysTest = np.zeros((n_trials, 1, 1))
+
+    for i, subject in enumerate(np.sort(df['subject'].unique())):
+        xsTrain[:, i, :] = df[df['subject'] == subject][features].values
+        ysTrain[:, i, :] = df[df['subject'] == subject][target].values
+
+    # If subsequent encouter with same partner: Reshape target to fit the shape of ysTrain
+    # ysTrain = np.array(target).reshape(n_trials, n_subjects, 1, order='F')
+
+    # The test set consists of the subject that is left out
+    xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
+    ysTest[:, 0, :] = ysTrain[:, leave_out_idx, :]    
+        
+    # Exclude leave_out_idx from xsTrain and ysTrain
+    xsTrain = np.delete(xsTrain, leave_out_idx, axis=1)
+    ysTrain = np.delete(ysTrain, leave_out_idx, axis=1)
+    n_subjects -= 1
+
+    # division between blocks
+    border = int(n_trials / len(df['block'].unique())) # number of trials per block
+    indices = np.arange(border, n_blocks * border, border)
+
+    # Add a dummy between the blocks
+    xsTrain_padded_LOOCV = np.insert(xsTrain, indices, np.zeros((1, n_subjects, n_features)), axis=0)
+    xsTest_padded_LOOCV = np.insert(xsTest, indices, np.zeros((1, 1, n_features)), axis=0)
+    # The targets already contain -1s, but we need to add one more to seperate the blocks
+    ysTrain_padded_LOOCV  = np.insert(ysTrain, indices, -1*np.ones((1, n_subjects, 1)), axis=0)
+    ysTest_padded_LOOCV = np.insert(ysTest, indices, -1*np.ones((1, 1, 1)), axis=0)
+    
+    assert xsTrain_padded_LOOCV[64:-1:65, :, :].all() == 0, 'There should be a dummy between the blocks'
+    assert xsTest_padded_LOOCV[64:-1:65, :, :].all() == 0, 'There should be a dummy between the blocks'
+    assert np.unique(ysTrain_padded_LOOCV[64:-1:65, :, :]) == -1, 'There should be a dummy between the blocks'
+    assert np.unique(ysTest_padded_LOOCV[64:-1:65, :, :]) == -1, 'There should be a dummy between the blocks'
+
+    train = DatasetRNN(xsTrain_padded_LOOCV, ysTrain_padded_LOOCV, batch_size)
+    test = DatasetRNN(xsTest_padded_LOOCV, ysTest_padded_LOOCV, batch_size)
+
+    return train, test
+
+def compute_log_likelihood(dataset, model_fun, params):
+  """Computes the log likelihood of the dataset under the model and the parameters.
+  (the probability each choice we see in the dataset would have occurred in the model)
   
+  Args:
+    dataset: A DatasetRNN object.
+    model_fun: A Haiku function that defines a network architecture.
+    params: A set of params suitable for that network.
+  """
+  
+  # It returns the normalized likelihood of the dataset under the model and the parameters as an output
+  xs, actual_choices = next(dataset)
+  n_trials_per_session, n_subjects = actual_choices.shape[:2]
+  model_outputs, model_states = rnn_utils.eval_model(model_fun, params, xs)
 
+  # Computes the logarithm of the softmax function, which rescales elements to the range [-infinity,0)
+  predicted_log_choice_probabilities = np.array(jax.nn.log_softmax(model_outputs[:, :, :-1])) # last entry is nans
 
+  log_likelihood = 0
+  n = 0  # Total number of trials across sessions.
+  for sess_i in range(n_subjects):
+    for trial_i in range(n_trials_per_session):
+      actual_choice = int(actual_choices[trial_i, sess_i]) # to match indices because choices are 1-6
+      if actual_choice >= 0:  # values < 0 are invalid trials which we ignore.
+        log_likelihood += predicted_log_choice_probabilities[trial_i, sess_i, actual_choice]
+        n += 1
+
+  normalized_likelihood = np.exp(log_likelihood / n)
+
+  print(f'Normalized Likelihood: {100 * normalized_likelihood:.1f}%')
+
+  return normalized_likelihood, model_outputs
