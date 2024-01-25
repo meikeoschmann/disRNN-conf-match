@@ -94,10 +94,9 @@ def target_next_encounter(data):
 
 def shift_df(df, features_prev): 
     '''Shift features of previous trial up by one row and rename the features. '''
-    df = df.groupby(['subject', 'block'])[features_prev].shift(-1, fill_value=0)
+    df = df.groupby(['subject', 'block'])[features_prev].shift(1, fill_value=0)
     df.columns = [str(col) + '_previous' for col in df.columns]
     features_prev = [str(col) + '_previous' for col in features_prev]
-
     return df, features_prev
 
 
@@ -121,15 +120,15 @@ def train_test(df, features, target, leave_out_idx=0, batch_size=None):
     # ysTrain = np.array(target).reshape(n_trials, n_subjects, 1, order='F')
 
     # Experiment: Set SConfidence to 1 in test set
-    sconf_idx = features.index('Sconfidence_previous')
-    xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
-    xsTest[:, 0, sconf_idx] = 1
-    ysTest[:, 0, :] = 1
+    #sconf_idx = features.index('Sconfidence_previous')
+    #xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
+    #xsTest[:, 0, sconf_idx] = 1
+    #ysTest[:, 0, :] = 1
     
 
     # The test set consists of the subject that is left out
-    #xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
-    #ysTest[:, 0, :] = ysTrain[:, leave_out_idx, :]    
+    xsTest[:, 0, :] = xsTrain[:, leave_out_idx, :]
+    ysTest[:, 0, :] = ysTrain[:, leave_out_idx, :]    
         
     # Exclude leave_out_idx from xsTrain and ysTrain
     xsTrain = np.delete(xsTrain, leave_out_idx, axis=1)
