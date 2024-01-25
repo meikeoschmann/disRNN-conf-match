@@ -234,7 +234,7 @@ def plot_bottlenecks(params, sort_latents=True, obs_names=None):
   )
   plt.ylabel('Latent #')
   plt.title('Update MLP Bottlenecks')
-  plt.savefig('./figures/bottlenecks.png')
+  plt.savefig('../figures/bottlenecks.png')
   return fig
 
 def plot_update_rules(params, make_network):
