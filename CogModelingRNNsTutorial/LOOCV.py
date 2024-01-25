@@ -13,8 +13,8 @@ import rnn_utils
 from rnn_utils import DatasetRNN
 
 # Load data
-data_dir = '/usr/src/app/data/data_for_Meike.mat'
-data_dir = '..\data\data_for_Meike.mat'
+#data_dir = '/usr/src/app/data/data_for_Meike.mat'
+data_dir = '.\data\data_for_Meike.mat'
 df = subject_data.load_data(data_dir)
 
 # Create additional features
@@ -63,7 +63,7 @@ def train_network_LOOCV(leave_out_idx):
     train, test = subject_data.train_test(df, features, target, leave_out_idx=leave_out_idx, batch_size=batch_size)
 
     # Set up the DisRNN
-    latent_size = 5    
+    latent_size = 8   
     obs_size = n_features
     update_mlp_shape = (n_features, n_features,)  
     choice_mlp_shape = (target_size,)
