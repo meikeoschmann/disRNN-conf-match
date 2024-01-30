@@ -12,6 +12,7 @@ import numpy as np
 import optax
 import time
 import warnings
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 
@@ -186,7 +187,7 @@ def train_model(
   ) -> float:
     # Mask any errors for which label is negative
     mask = jnp.logical_not(labels < 0)
-    log_probs = jax.nn.log_softmax(output_logits)
+    log_probs = jax.nn.log_softmax(output_logits) # softmax cross-entropy loss
     if labels.shape[2] != 1:
       raise ValueError(
           'Categorical loss function requires targets to be of dimensionality'
@@ -214,8 +215,7 @@ def train_model(
     # (n_steps, n_episodes, n_targets)
     model_output = model.apply(params, random_key, xs)
     output_logits = model_output[:, :, :-1]
-    #penalty = jnp.sum(model_output[:, :, -1]) #! LAST ELEMENT IS NAN!
-    penalty = jnp.sum(output_logits[:, :, -1])
+    penalty = jnp.sum(model_output[:, :, -1])
     loss = (
         categorical_log_likelihood(targets, output_logits)
         + penalty_scale * penalty
@@ -236,10 +236,12 @@ def train_model(
     loss, grads = jax.value_and_grad(compute_loss, argnums=0)(
         params, xs, ys, random_key
     )
+    
     grads, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, grads)
-    return loss, params, opt_state
-
+    #jax.debug.breakpoint()
+    return loss, params, opt_state, grads
+ 
   # Train the network!
   training_loss = []
   t_start = time.time()
@@ -251,22 +253,97 @@ def train_model(
       xs = xs[:truncate_seq_length]
       ys = ys[:truncate_seq_length]
 
-    loss, params, opt_state = train_step(params, opt_state, xs, ys, key_i)
+    #if step == 20:
+    #  jax.debug.breakpoint()
 
+    #if step == 500: 
+    #  jax.debug.breakpoint()
+    loss, params, opt_state, gradients = train_step(params, opt_state, xs, ys, key_i)
+
+    
+    if step == 0: 
+      # df_ave_grads = pd.DataFrame(columns=[grad for grad in gradients.keys()], index=np.arange(n_steps))
+      # df_max_grads = pd.DataFrame(columns=[grad for grad in gradients.keys()], index=np.arange(n_steps))
+      
+      n_latents = gradients['hk_dis_rnn']['latent_inits'].shape[0]
+      # one column for each latent variable
+      col_latent_inits = ['latent_inits_' + str(i) for i in range(n_latents)]
+      col_latent_sigmas = ['latent_sigmas_' + str(i) for i in range(n_latents)]
+      col_update_mlp_gates = ['update_mlp_gates_' + str(i) for i in range(n_latents)]
+      col_update_mlp_sigmas = ['update_mlp_sigmas_' + str(i) for i in range(n_latents)]
+
+      df_latent_inits = pd.DataFrame(columns=col_latent_inits, index=np.arange(n_steps))
+      df_latent_sigmas = pd.DataFrame(columns=col_latent_sigmas, index=np.arange(n_steps))
+      df_update_mlp_gates = pd.DataFrame(columns=col_update_mlp_gates, index=np.arange(n_steps))
+      df_update_mlp_sigmas = pd.DataFrame(columns=col_update_mlp_sigmas, index=np.arange(n_steps))
+
+    
+    df_latent_inits.loc[int(step), :] = gradients['hk_dis_rnn']['latent_inits']
+    df_latent_sigmas.loc[int(step), :] = gradients['hk_dis_rnn']['latent_sigmas_unsquashed']
+    df_update_mlp_gates.loc[int(step), :] = (np.mean(gradients['hk_dis_rnn']['update_mlp_gates'], axis=0))
+    df_update_mlp_sigmas.loc[int(step), :] = (np.mean(gradients['hk_dis_rnn']['update_mlp_sigmas_unsquashed'], axis=0))
+
+    # for grad in gradients.keys():
+    #   for var in gradients[grad].keys():
+    #       df_ave_grads.loc[int(step), grad] = float(np.mean(gradients[grad][var]))
+    #       df_max_grads.loc[int(step), grad] = float(np.max(gradients[grad][var]))
+    
+    #jax.debug.breakpoint()
+    
     # Log every 10th step
     if step % 10 == 9:
       training_loss.append(float(loss))
       print((f'\rStep {step + 1} of {n_steps}; '
              f'Loss: {loss:.4e}. '
              f'(Time: {time.time()-t_start:.1f}s)'), end='')
+      
 
-  # If we actually did any training, print final loss and make a nice plot
+  # If we actually did any training, print final loss and make a nice plot of the losses and the gradients
   if n_steps > 1 and do_plot:
-    plt.figure()
-    plt.semilogy(training_loss, color='black')
-    plt.xlabel('Training Step')
-    plt.ylabel('Mean Loss')
-    plt.title('Loss over Training')
+    fig, ax = plt.subplots(5, 1, figsize=(10, 50))
+    ax[0].semilogy(training_loss, color='black')
+    ax[0].set_xlabel('Training Step')
+    ax[0].set_ylabel('Mean Loss')
+    ax[0].set_title('Loss over Training')
+    ax[1].plot(df_latent_inits)
+    ax[1].legend(df_latent_inits.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    ax[1].set_xlabel('Training Step')
+    ax[1].set_ylabel('Mean Gradient')
+    ax[1].set_title('Mean Gradient Latent Inits over Training')
+    ax[2].plot(df_latent_sigmas)
+    ax[2].legend(df_latent_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    ax[2].set_xlabel('Training Step')
+    ax[2].set_ylabel('Mean Gradient')
+    ax[2].set_title('Mean Gradient Latent Sigmas over Training')
+    ax[3].plot(df_update_mlp_gates)
+    ax[3].legend(df_update_mlp_gates.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    ax[3].set_xlabel('Training Step')
+    ax[3].set_ylabel('Mean Gradient')
+    ax[3].set_title('Mean Gradient Update MLP Gates over Training')
+    ax[4].plot(df_update_mlp_sigmas)
+    ax[4].legend(df_update_mlp_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    ax[4].set_xlabel('Training Step')
+    ax[4].set_ylabel('Mean Gradient')
+    ax[4].set_title('Mean Gradient Update MLP Sigmas over Training')
+    plt.show()
+
+
+
+
+
+
+    # ax[1].plot(df_ave_grads)
+    # ax[1].legend(df_ave_grads.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    # ax[1].set_xlabel('Training Step')
+    # ax[1].set_ylabel('Mean Gradient')
+    # ax[1].set_title('Mean Gradient over Training')
+    # ax[2].plot(df_max_grads)
+    # #ax[2].legend(df_max_grads.columns)
+    # ax[2].set_xlabel('Training Step')
+    # ax[2].set_ylabel('Max Gradient')
+    # ax[2].set_title('Max Gradient over Training')
+    # plt.show()
+
 
   losses = {
       'training_loss': np.array(training_loss),
