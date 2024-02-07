@@ -63,10 +63,10 @@ def train_network_LOOCV(leave_out_idx):
     train, test = subject_data.train_test(df, features, target, leave_out_idx=leave_out_idx, batch_size=batch_size)
 
     # Set up the DisRNN
-    latent_size = 8   
+    latent_size = 4 
     obs_size = n_features
-    update_mlp_shape = (n_features, n_features,)  
-    choice_mlp_shape = (target_size,)
+    update_mlp_shape = (3,3,)  
+    choice_mlp_shape = (target_size, target_size,)
 
     def make_disrnn():
         model = disrnn.HkDisRNN(
@@ -90,7 +90,7 @@ def train_network_LOOCV(leave_out_idx):
     optimizer = optax.adam(learning_rate=1e-3)
 
     # Fit the model for a few steps without a penalty, to get a good starting point
-    n_steps = 2000 #@param
+    n_steps = 100 #@param
     information_penalty = 0
 
     disrnn_params, opt_state, losses = rnn_utils.train_model(
