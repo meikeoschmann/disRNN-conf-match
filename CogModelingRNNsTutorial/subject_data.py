@@ -48,6 +48,21 @@ def categorical_partners(data, features_prev, features_curr):
     
     return data, features_prev, features_curr
 
+def categorical_theta(data, features_prev, features_curr):
+    '''Create one-hot encoding for theta values'''
+    
+    data['theta_1'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.2 else 0)
+    data['theta_2'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.4 else 0)
+    data['theta_3'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.6 else 0)
+    data['theta_4'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.8 else 0)
+
+    features_prev.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
+    features_prev.remove('theta_rescaled')
+    features_curr.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
+    features_curr.remove('theta_rescaled')
+    
+    return data, features_prev, features_curr
+
 
 def target_next_encounter(data):
     '''Create target based on next encounter with the same partner: 
@@ -156,6 +171,35 @@ def train_test(df, features, target, leave_out_idx=0, batch_size=None):
 
     return train, test
 
+def single_subject(df, features, target, subject_idx=1, batch_size=None):
+
+    tr = 3
+    df = df[df['subject'] == subject_idx]
+    n_blocks = df['block'].unique().size
+    n_trials = int(df['trial'].unique().size/n_blocks) 
+    df_test = df[df['block'] > tr]
+    df_train = df[df['block'] <= tr]
+    n_features = len(features)
+
+
+    xsTrain = np.zeros((n_trials, tr, n_features))
+    ysTrain = np.zeros((n_trials, tr, 1))
+    xsTest = np.zeros((n_trials, n_blocks-tr, n_features))
+    ysTest = np.zeros((n_trials, n_blocks-tr, 1))
+
+    for i in range(tr):
+        xsTrain[:, i, :] = df_train[df_train['block'] == i+1][features].values
+        ysTrain[:, i, :] = df_train[df_train['block'] == i+1][target].values
+
+    for i in range(tr, n_blocks):
+        xsTest[:, i-tr, :] = df_test[df_test['block'] == i+1][features].values
+        ysTest[:, i-tr, :] = df_test[df_test['block'] == i+1][target].values
+    
+    train = DatasetRNN(xsTrain, ysTrain, batch_size)
+    test = DatasetRNN(xsTest, ysTest, batch_size)
+
+    return train, test
+
 def compute_log_likelihood(dataset, model_fun, params):
   """Computes the log likelihood of the dataset under the model and the parameters.
   (the probability each choice we see in the dataset would have occurred in the model)
@@ -172,8 +216,9 @@ def compute_log_likelihood(dataset, model_fun, params):
   model_outputs, model_states = rnn_utils.eval_model(model_fun, params, xs)
 
   # Computes the logarithm of the softmax function, which rescales elements to the range [-infinity,0)
-  predicted_log_choice_probabilities = np.array(jax.nn.log_softmax(model_outputs[:, :, :-1])) # last entry is nans
-
+  #predicted_log_choice_probabilities = np.array(jax.nn.log_softmax(model_outputs[:, :, :-1])) # last entry is nans
+  predicted_log_choice_probabilities = np.log(model_outputs[:, :, :-1]) # last entry is nans
+  
   log_likelihood = 0
   n = 0  # Total number of trials across sessions.
   for sess_i in range(n_subjects):
