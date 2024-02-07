@@ -260,36 +260,35 @@ def train_model(
     #  jax.debug.breakpoint()
     loss, params, opt_state, gradients = train_step(params, opt_state, xs, ys, key_i)
 
-    
-    if step == 0: 
-      # df_ave_grads = pd.DataFrame(columns=[grad for grad in gradients.keys()], index=np.arange(n_steps))
-      # df_max_grads = pd.DataFrame(columns=[grad for grad in gradients.keys()], index=np.arange(n_steps))
-      
-      n_latents = gradients['hk_dis_rnn']['latent_inits'].shape[0]
-      # one column for each latent variable
-      col_latent_inits = ['latent_inits_' + str(i) for i in range(n_latents)]
-      col_latent_sigmas = ['latent_sigmas_' + str(i) for i in range(n_latents)]
-      col_update_mlp_gates = ['update_mlp_gates_' + str(i) for i in range(n_latents)]
-      col_update_mlp_sigmas = ['update_mlp_sigmas_' + str(i) for i in range(n_latents)]
-
-      df_latent_inits = pd.DataFrame(columns=col_latent_inits, index=np.arange(n_steps))
-      df_latent_sigmas = pd.DataFrame(columns=col_latent_sigmas, index=np.arange(n_steps))
-      df_update_mlp_gates = pd.DataFrame(columns=col_update_mlp_gates, index=np.arange(n_steps))
-      df_update_mlp_sigmas = pd.DataFrame(columns=col_update_mlp_sigmas, index=np.arange(n_steps))
-
-    
-    df_latent_inits.loc[int(step), :] = gradients['hk_dis_rnn']['latent_inits']
-    df_latent_sigmas.loc[int(step), :] = gradients['hk_dis_rnn']['latent_sigmas_unsquashed']
-    df_update_mlp_gates.loc[int(step), :] = (np.mean(gradients['hk_dis_rnn']['update_mlp_gates'], axis=0))
-    df_update_mlp_sigmas.loc[int(step), :] = (np.mean(gradients['hk_dis_rnn']['update_mlp_sigmas_unsquashed'], axis=0))
-
-    # for grad in gradients.keys():
-    #   for var in gradients[grad].keys():
-    #       df_ave_grads.loc[int(step), grad] = float(np.mean(gradients[grad][var]))
-    #       df_max_grads.loc[int(step), grad] = float(np.max(gradients[grad][var]))
-    
     #jax.debug.breakpoint()
+    if step == 0: 
+           
+    #   n_latents = gradients['hk_dis_rnn']['latent_inits'].shape[0]
+    #   # one column for each latent variable
+    #   col_latent_inits = ['latent_inits_' + str(i) for i in range(n_latents)]
+    #   col_latent_sigmas = ['latent_sigmas_' + str(i) for i in range(n_latents)]
+    #   col_update_mlp_gates = ['update_mlp_gates_' + str(i) for i in range(n_latents)]
+    #   col_update_mlp_sigmas = ['update_mlp_sigmas_' + str(i) for i in range(n_latents)]
+
+    #   df_latent_inits = pd.DataFrame(columns=col_latent_inits, index=np.arange(n_steps))
+    #   df_latent_sigmas = pd.DataFrame(columns=col_latent_sigmas, index=np.arange(n_steps))
+    #   df_update_mlp_gates = pd.DataFrame(columns=col_update_mlp_gates, index=np.arange(n_steps))
+    #   df_update_mlp_sigmas = pd.DataFrame(columns=col_update_mlp_sigmas, index=np.arange(n_steps))
+
     
+    # df_latent_inits.loc[int(step), :] = gradients['hk_dis_rnn']['latent_inits']
+    # df_latent_sigmas.loc[int(step), :] = gradients['hk_dis_rnn']['latent_sigmas_unsquashed']
+    # df_update_mlp_gates.loc[int(step), :] = (np.mean(gradients['hk_dis_rnn']['update_mlp_gates'], axis=0))
+    # df_update_mlp_sigmas.loc[int(step), :] = (np.mean(gradients['hk_dis_rnn']['update_mlp_sigmas_unsquashed'], axis=0))
+      df_grads_mean = pd.DataFrame(columns=[layer for layer in gradients.keys()], index=np.arange(n_steps))
+      df_grads_max = pd.DataFrame(columns=[layer for layer in gradients.keys()], index=np.arange(n_steps))
+    for layer in gradients.keys():
+      #for grads in gradients[layer].keys():
+      if layer == 'hk_dis_rnn':
+        continue
+      df_grads_mean.loc[int(step), layer] = np.mean(gradients[layer]['w'])
+      df_grads_max.loc[int(step), layer] = np.max(np.abs(gradients[layer]['w']))
+        
     # Log every 10th step
     if step % 10 == 9:
       training_loss.append(float(loss))
@@ -300,31 +299,36 @@ def train_model(
 
   # If we actually did any training, print final loss and make a nice plot of the losses and the gradients
   if n_steps > 1 and do_plot:
-    fig, ax = plt.subplots(5, 1, figsize=(10, 50))
+    #fig, ax = plt.subplots(5, 1, figsize=(10, 50))
+    fig, ax = plt.subplots(3, 1, figsize=(10, 30))
     ax[0].semilogy(training_loss, color='black')
     ax[0].set_xlabel('Training Step')
     ax[0].set_ylabel('Mean Loss')
     ax[0].set_title('Loss over Training')
-    ax[1].plot(df_latent_inits)
-    ax[1].legend(df_latent_inits.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    # ax[1].plot(df_latent_inits)
+    # ax[1].legend(df_latent_inits.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    ax[1].plot(df_grads_mean)
+    ax[1].legend(df_grads_mean.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
     ax[1].set_xlabel('Training Step')
     ax[1].set_ylabel('Mean Gradient')
-    ax[1].set_title('Mean Gradient Latent Inits over Training')
-    ax[2].plot(df_latent_sigmas)
-    ax[2].legend(df_latent_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    #ax[1].set_title('Mean Gradient Latent Inits over Training')
+    # ax[2].plot(df_latent_sigmas)
+    # ax[2].legend(df_latent_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    ax[2].plot(df_grads_max)
+    ax[2].legend(df_grads_max.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
     ax[2].set_xlabel('Training Step')
-    ax[2].set_ylabel('Mean Gradient')
-    ax[2].set_title('Mean Gradient Latent Sigmas over Training')
-    ax[3].plot(df_update_mlp_gates)
-    ax[3].legend(df_update_mlp_gates.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
-    ax[3].set_xlabel('Training Step')
-    ax[3].set_ylabel('Mean Gradient')
-    ax[3].set_title('Mean Gradient Update MLP Gates over Training')
-    ax[4].plot(df_update_mlp_sigmas)
-    ax[4].legend(df_update_mlp_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
-    ax[4].set_xlabel('Training Step')
-    ax[4].set_ylabel('Mean Gradient')
-    ax[4].set_title('Mean Gradient Update MLP Sigmas over Training')
+    ax[2].set_ylabel('Max Gradient')
+    #ax[2].set_title('Mean Gradient Latent Sigmas over Training')
+    # ax[3].plot(df_update_mlp_gates)
+    # ax[3].legend(df_update_mlp_gates.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    # ax[3].set_xlabel('Training Step')
+    # ax[3].set_ylabel('Mean Gradient')
+    # ax[3].set_title('Mean Gradient Update MLP Gates over Training')
+    # ax[4].plot(df_update_mlp_sigmas)
+    # ax[4].legend(df_update_mlp_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    # ax[4].set_xlabel('Training Step')
+    # ax[4].set_ylabel('Mean Gradient')
+    # ax[4].set_title('Mean Gradient Update MLP Sigmas over Training')
     plt.show()
 
 
