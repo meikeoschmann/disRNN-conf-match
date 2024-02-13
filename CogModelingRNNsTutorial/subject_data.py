@@ -216,8 +216,7 @@ def compute_log_likelihood(dataset, model_fun, params):
   model_outputs, model_states = rnn_utils.eval_model(model_fun, params, xs)
 
   # Computes the logarithm of the softmax function, which rescales elements to the range [-infinity,0)
-  #predicted_log_choice_probabilities = np.array(jax.nn.log_softmax(model_outputs[:, :, :-1])) # last entry is nans
-  predicted_log_choice_probabilities = np.log(model_outputs[:, :, :-1]) # last entry is nans
+  predicted_log_choice_probabilities = np.array(jax.nn.log_softmax(model_outputs[:, :, :-1])) # last entry is nans
   
   log_likelihood = 0
   n = 0  # Total number of trials across sessions.
