@@ -1,3 +1,5 @@
+'''Leave-one-out cross-validation for all subjects.'''
+
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -29,9 +31,14 @@ features_previous_t = ['block', 'type', 'theta', 'Pconfidence', 'Pacc', 'Sacc', 
 features_current_t = ['type', 'theta', 'Sacc']
 target = ['Sconfidence']
 
-categorical_partners = False
+# One-hot encode categorical features
+categorical_partners = True
 if categorical_partners:
     df, features_previous_t, features_current_t = subject_data.categorical_partners(df, features_previous_t, features_current_t)
+
+categorical_theta = True
+if categorical_theta:
+    df, features_previous_t, features_current_t = subject_data.categorical_theta(df, features_previous_t, features_current_t)
 
 # Shift features from previous trial up by one row
 df_shifted, features_previous_t = subject_data.shift_df(df, features_previous_t)
@@ -58,15 +65,16 @@ def train_network_LOOCV(leave_out_idx):
 
     n_features = len(features)
     target_size = len(np.unique(df[target]))
-    batch_size = None
+    batch_size = 1
     
     train, test = subject_data.train_test(df, features, target, leave_out_idx=leave_out_idx, batch_size=batch_size)
 
     # Set up the DisRNN
     latent_size = 4 
+    hidden_size = int(np.ceil(np.mean([n_features, target_size])))
     obs_size = n_features
-    update_mlp_shape = (3,3,)  
-    choice_mlp_shape = (target_size, target_size,)
+    update_mlp_shape = (n_features, hidden_size,) 
+    choice_mlp_shape = (target_size, )
 
     def make_disrnn():
         model = disrnn.HkDisRNN(
@@ -90,7 +98,7 @@ def train_network_LOOCV(leave_out_idx):
     optimizer = optax.adam(learning_rate=1e-3)
 
     # Fit the model for a few steps without a penalty, to get a good starting point
-    n_steps = 100 #@param
+    n_steps = 2000 #@param
     information_penalty = 0
 
     disrnn_params, opt_state, losses = rnn_utils.train_model(
