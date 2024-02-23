@@ -10,110 +10,70 @@ import jax
 import rnn_utils
 from rnn_utils import DatasetRNN
 
-DATA_DIR = '..\data\data_for_Meike.mat'
+class SubjectData:
 
-def load_data(data_dir=DATA_DIR):
-    '''Load subject data from matlab file.'''
-
-    if not os.path.exists(data_dir):
-        raise ValueError('Data directory does not exist.')
-
-    matDf = loadmat(data_dir)['data']
-    features = matDf.dtype.names
-    df = df = pd.DataFrame(np.squeeze(np.array(matDf.tolist())).T, columns=features).drop(columns=['label','Spcorrect1', 'Spcorrect2', 'Snoise']).sort_values(by=['subject', 'trial'])
-
-    return df
+    def __init__(self, data, features_prev, features_curr, target, categorical_partners=False, categorical_theta=False):
+        self.data = data
+        self.features_prev = features_prev
+        self.features_curr = features_curr
+        self.target = target
+        self.categorical_partners = categorical_partners
+        self.categorical_theta = categorical_theta
 
 
-def categorical_partners(data, features_prev, features_curr):
-    '''Create one-hot encoding for block and partner type'''
-    
-    data['block1'] = data['block'].apply(lambda x: 1 if x == 1 else 0)
-    data['block2'] = data['block'].apply(lambda x: 1 if x == 2 else 0)
-    data['block3'] = data['block'].apply(lambda x: 1 if x == 3 else 0)
-    data['block4'] = data['block'].apply(lambda x: 1 if x == 4 else 0)
-    data['b1_p1'] = data['block1'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
-    data['b1_p2'] = data['block1'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
-    data['b2_p1'] = data['block2'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
-    data['b2_p2'] = data['block2'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
-    data['b3_p1'] = data['block3'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
-    data['b3_p2'] = data['block3'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
-    data['b4_p1'] = data['block4'] * data['type'].apply(lambda x: 1 if x == 1 else 0)
-    data['b4_p2'] = data['block4'] * data['type'].apply(lambda x: 1 if x == 2 else 0)
+        self.select_features()
+        if self.categorical_partners:
+            self.encode_partners()
+        if self.categorical_theta:
+            self.encode_theta()
+        self.shift_df()
+        
+    def __call__(self):
+        return self.data
 
-    features_prev.extend(['b1_p1', 'b1_p2', 'b2_p1', 'b2_p2', 'b3_p1', 'b3_p2', 'b4_p1', 'b4_p2'])
-    features_prev.remove('type')
-    features_curr.extend(['b1_p1', 'b1_p2', 'b2_p1', 'b2_p2', 'b3_p1', 'b3_p2', 'b4_p1', 'b4_p2'])
-    features_curr.remove('type')
-    
-    return data, features_prev, features_curr
-
-def categorical_theta(data, features_prev, features_curr):
-    '''Create one-hot encoding for theta values'''
-    
-    data['theta_1'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.2 else 0)
-    data['theta_2'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.4 else 0)
-    data['theta_3'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.6 else 0)
-    data['theta_4'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.8 else 0)
-
-    features_prev.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
-    features_prev.remove('theta_rescaled')
-    features_curr.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
-    features_curr.remove('theta_rescaled')
-    
-    return data, features_prev, features_curr
+    def select_features(self):
+        '''Remove and create additional features for the dataset'''
+        self.data['Reward'] = (self.data['select'] == 1) * self.data['Sacc'] + (self.data['select'] == -1) * self.data['Pacc']
+        self.data['theta'] = np.absolute(self.data['dtheta'])
+        self.data['Sconfidence'] = self.data.groupby(['subject', 'block'])['Sreport'].transform(lambda x: np.where(x >= np.mean(x), 1, 0))
+        self.data['Pconfidence'] = self.data.groupby(['subject', 'block'])['Preport'].transform(lambda x: np.where(x >= np.mean(x), 1, 0))
 
 
-def target_next_encounter(data):
-    '''Create target based on next encounter with the same partner: 
-    for a given index in the dataframe, find the next index that has the same value for data['type']
-    and add data['Sconfidence'] of that index to the target list'''
-    
-    subject_list = list(data['subject'].unique())
-    target = []
-    Sacc_next = []
-    theta_next = []
-    for i in range(len(data)):
-        for j in range(i+1, len(data)):
-            if data['subject'].iloc[i] == data['subject'].iloc[j] and data['block'].iloc[i] == data['block'].iloc[j] and data['type'].iloc[i] == data['type'].iloc[j]:
-                target.append(data['Sconfidence'].iloc[j])
-                Sacc_next.append(data['Sacc'].iloc[j])
-                theta_next.append(data['theta'].iloc[j])
-                break
 
-            # if the next trial is the first one of the next block, append -1
-            elif data['subject'].iloc[i] == data['subject'].iloc[j] and (data['block'].iloc[i] + 1) == data['block'].iloc[j]:
-                target.append(-1)
-                Sacc_next.append(0)
-                theta_next.append(0)
-                break
+    def encode_partners(self):
+        '''Create one-hot encoding for block and partner type'''
+        
+        for i in range(1, 5):
+            self.data['block' + str(i)] = self.data['block'].apply(lambda x: 1 if x == i else 0)
+            for j in range(1, 3):
+                self.data['b' + str(i) + '_p' + str(j)] = self.data['block' + str(i)] * self.data['type'].apply(lambda x: 1 if x == j else 0)
+                self.features_prev.append('b' + str(i) + '_p' + str(j))
+                self.features_curr.append('b' + str(i) + '_p' + str(j))
+        self.features_prev.remove('type')
+        self.features_curr.remove('type')
 
-            # if the next trial is the first one of the next subject, append -1
-            elif (subject_list.index(data['subject'].iloc[i])+1 < len(subject_list)) and (subject_list[subject_list.index(data['subject'].iloc[i])+1]) == data['subject'].iloc[j] and data['block'].iloc[i] == 4 and data['block'].iloc[j] == 1:
-                target.append(-1)
-                Sacc_next.append(0)
-                theta_next.append(0)
-                break
-    # no target for the last two trials, append -1 twice    
-    target.append(-1)
-    target.append(-1)
-    Sacc_next.append(0)
-    Sacc_next.append(0)
-    theta_next.append(0)
-    theta_next.append(0)
+    # def encode_theta(data, features_prev, features_curr):
+    #     '''Create one-hot encoding for theta values'''
+        
+    #     data['theta_1'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.2 else 0) # comparison with floats can cause problems
+    #     data['theta_2'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.4 else 0)
+    #     data['theta_3'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.6 else 0)
+    #     data['theta_4'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.8 else 0)
 
-    data['Sacc_next'] = Sacc_next
-    data['theta_next'] = theta_next
+    #     features_prev.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
+    #     features_prev.remove('theta_rescaled')
+    #     features_curr.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
+    #     features_curr.remove('theta_rescaled')
+        
+    #     return data, features_prev, features_curr
 
-    return data, target
-
-def shift_df(df, features_prev): 
-    '''Shift features of previous trial up by one row and rename the features. '''
-    df = df.groupby(['subject', 'block'])[features_prev].shift(1, fill_value=0)
-    df.columns = [str(col) + '_previous' for col in df.columns]
-    features_prev = [str(col) + '_previous' for col in features_prev]
-    return df, features_prev
-
+    def shift_df(self): 
+        '''Shift features of previous trial up by one row and rename the features. '''
+        data_shifted = self.data.groupby(['subject', 'block'])[self.features_prev].shift(1, fill_value=0)
+        self.features_prev = [str(col) + '_previous' for col in self.features_prev]
+        data_shifted.columns = self.features_prev
+        self.data = pd.concat([self.data, data_shifted], axis=1)
+        
 
 def train_test(df, features, target, leave_out_idx=0, batch_size=None):
 
@@ -199,6 +159,7 @@ def single_subject(df, features, target, subject_idx=1, batch_size=None):
     test = DatasetRNN(xsTest, ysTest, batch_size)
 
     return train, test
+ 
 
 def compute_log_likelihood(dataset, model_fun, params):
   """Computes the log likelihood of the dataset under the model and the parameters.
