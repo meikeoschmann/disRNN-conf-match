@@ -30,6 +30,13 @@ class SubjectData:
         
     def __call__(self):
         return self.data
+    
+    def get_feature_data(self):
+        features = self.features_prev + self.features_curr
+        return self.data[features]
+    
+    def get_target_data(self):
+        return self.data[self.target]
 
     def select_features(self):
         '''Remove and create additional features for the dataset'''
