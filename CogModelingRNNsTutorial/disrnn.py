@@ -118,6 +118,7 @@ class HkDisRNN(hk.RNNCore):
     )
     # update_mlp_sigmas: (obs_size + latent_size, latent_size)
     update_mlp_sigmas = self._update_mlp_sigmas * (1 - self._eval_mode)
+
     # update_mlp_inputs: (batch_size, obs_size + latent_size, latent_size)
     update_mlp_inputs = update_mlp_mus + update_mlp_sigmas * jax.random.normal(
         hk.next_rng_key(), update_mlp_mus.shape
@@ -160,12 +161,14 @@ class HkDisRNN(hk.RNNCore):
     choice_mlp_output = hk.nets.MLP(
         self._choice_mlp_shape, activation=self._activation
     )(noised_up_latents)
+    
     # (batch_size, target_size)
     y_hat = hk.Linear(self._target_size)(choice_mlp_output)
 
     # Append the penalty, so that rnn_utils can apply it as part of the 
     
     penalty = jnp.expand_dims(penalty, 1)  # (batch_size, 1)
+   
     # If we are in eval mode, there should be no penalty
     penalty = penalty * (1 - self._eval_mode)
 
@@ -212,7 +215,7 @@ def plot_bottlenecks(params, sort_latents=True, obs_names=None):
     update_sigmas = update_sigmas[:, update_sigma_order]
 
   latent_names = np.arange(1, latent_dim + 1)
-  fig = plt.subplots(1, 2, figsize=(10, 5))
+  fig = plt.subplots(1, 2, figsize=(20,10))
   plt.subplot(1, 2, 1)
   plt.imshow(np.swapaxes([1 - latent_sigmas], 0, 1), cmap='Oranges')
   plt.clim(vmin=0, vmax=1)

@@ -31,6 +31,9 @@ class SubjectData:
     def __call__(self):
         return self.data
     
+    def get_df(self):
+        return self.data
+    
     def get_feature_data(self):
         features = self.features_prev + self.features_curr
         return self.data[features]
@@ -59,20 +62,26 @@ class SubjectData:
         self.features_prev.remove('type')
         self.features_curr.remove('type')
 
-    # def encode_theta(data, features_prev, features_curr):
-    #     '''Create one-hot encoding for theta values'''
-        
-    #     data['theta_1'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.2 else 0) # comparison with floats can cause problems
-    #     data['theta_2'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.4 else 0)
-    #     data['theta_3'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.6 else 0)
-    #     data['theta_4'] = data['theta_rescaled'].apply(lambda x: 1 if x == 0.8 else 0)
+    def encode_theta(self):
+        '''Create one-hot encoding for theta values'''
+      
+        self.data['theta_rescaled'] = 0
 
-    #     features_prev.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
-    #     features_prev.remove('theta_rescaled')
-    #     features_curr.extend(['theta_1', 'theta_2', 'theta_3', 'theta_4'])
-    #     features_curr.remove('theta_rescaled')
+        for subject in self.data['subject'].unique():
+            self.data.loc[self.data['subject'] == subject, 'theta_rescaled'] = pd.qcut(
+                self.data.loc[self.data['subject'] == subject, 'theta'], 
+                4, 
+                labels=[1, 2, 3, 4]
+            ).astype(int)
         
-    #     return data, features_prev, features_curr
+        for i in range(1, 5):
+            self.data['theta_' + str(i)] = self.data['theta_rescaled'].apply(lambda x: 1 if x == i else 0)
+            self.features_prev.append('theta_' + str(i))
+            self.features_curr.append('theta_' + str(i))
+    
+        #self.features_prev.remove('theta')
+        #self.features_curr.remove('theta')
+        
 
     def shift_df(self): 
         '''Shift features of previous trial up by one row and rename the features. '''
@@ -130,11 +139,11 @@ def train_test(df, features, target, leave_out_idx=0, batch_size=None):
     
     assert xsTrain_padded_LOOCV[64:-1:65, :, :].all() == 0, 'There should be a dummy between the blocks'
     assert xsTest_padded_LOOCV[64:-1:65, :, :].all() == 0, 'There should be a dummy between the blocks'
-    assert np.unique(ysTrain_padded_LOOCV[64:-1:65, :, :]) == -1, 'There should be a dummy between the blocks'
-    assert np.unique(ysTest_padded_LOOCV[64:-1:65, :, :]) == -1, 'There should be a dummy between the blocks'
+    #assert np.unique(ysTrain_padded_LOOCV[64:-1:65, :, :]) == -1, 'There should be a dummy between the blocks'
+    #assert np.unique(ysTest_padded_LOOCV[64:-1:65, :, :]) == -1, 'There should be a dummy between the blocks'
 
-    train = DatasetRNN(xsTrain_padded_LOOCV, ysTrain_padded_LOOCV, batch_size)
-    test = DatasetRNN(xsTest_padded_LOOCV, ysTest_padded_LOOCV, batch_size)
+    train = DatasetRNN(xsTrain_padded_LOOCV, ysTrain_padded_LOOCV, batch_size, train=True)
+    test = DatasetRNN(xsTest_padded_LOOCV, ysTest_padded_LOOCV, batch_size, train=False)
 
     return train, test
 

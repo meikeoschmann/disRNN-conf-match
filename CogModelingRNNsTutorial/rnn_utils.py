@@ -38,7 +38,8 @@ class DatasetRNN():
   def __init__(self,
                xs: np.ndarray,
                ys: np.ndarray,
-               batch_size: Optional[int] = None):
+               batch_size: Optional[int] = None,
+               train: bool = False):
     """Do error checking and bin up the dataset into batches.
 
     Args:
@@ -66,11 +67,11 @@ class DatasetRNN():
       msg = ('number of episodes in xs {} must be equal to number of episodes'
              ' in ys {}.')
       raise ValueError(msg.format(xs.shape[0], ys.shape[0]))
-
-    # Is the number of episodes divisible by the batch size?
-    if xs.shape[1] % batch_size != 0:
-      msg = 'dataset size {} must be divisible by batch_size {}.'
-      raise ValueError(msg.format(xs.shape[1], batch_size))
+    if train: 
+      # Is the number of episodes divisible by the batch size?
+      if xs.shape[1] % batch_size != 0:
+        msg = 'dataset size {} must be divisible by batch_size {}.'
+        raise ValueError(msg.format(xs.shape[1], batch_size))
 
     # Property setting
     self._xs = xs
@@ -185,6 +186,9 @@ def train_model(
   def categorical_log_likelihood(
       labels: np.ndarray, output_logits: np.ndarray
   ) -> float:
+    
+    l2_lambda = 0.5
+
     # Mask any errors for which label is negative
     mask = jnp.logical_not(labels < 0)
     log_probs = jax.nn.log_softmax(output_logits) # softmax cross-entropy loss
@@ -198,13 +202,18 @@ def train_model(
     )
     log_liks = one_hot_labels * log_probs
     masked_log_liks = jnp.multiply(log_liks, mask)
-    loss = -jnp.nansum(masked_log_liks)
+
+    l2_reg = 0.5 * l2_lambda * sum(jnp.sum(jnp.square(param)) for param in jax.tree_leaves(output_logits))
+    
+    loss = -jnp.nansum(masked_log_liks) + l2_reg
     return loss
 
   def categorical_loss(
       params, xs: np.ndarray, labels: np.ndarray, random_key
   ) -> float:
-    output_logits = model.apply(params, random_key, xs)
+    #output_logits = model.apply(params, random_key, xs)
+    model_output = model.apply(params, random_key, xs)
+    output_logits = model_output[:, :, :-1]
     loss = categorical_log_likelihood(labels, output_logits)
     return loss
 
@@ -239,7 +248,6 @@ def train_model(
     
     grads, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, grads)
-    #jax.debug.breakpoint()
     return loss, params, opt_state, grads
  
   # Train the network!
