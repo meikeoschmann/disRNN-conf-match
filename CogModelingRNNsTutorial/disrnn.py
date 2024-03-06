@@ -7,6 +7,9 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
+from tueplots import bundles, figsizes
+from tueplots.constants import markers
+from tueplots.constants.color import rgb
 
 import rnn_utils
 
@@ -215,9 +218,11 @@ def plot_bottlenecks(params, sort_latents=True, obs_names=None):
     update_sigmas = update_sigmas[:, update_sigma_order]
 
   latent_names = np.arange(1, latent_dim + 1)
+
+  plt.rcParams["text.usetex"] = False
   fig = plt.subplots(1, 2, figsize=(20,10))
   plt.subplot(1, 2, 1)
-  plt.imshow(np.swapaxes([1 - latent_sigmas], 0, 1), cmap='Oranges')
+  plt.imshow(np.swapaxes([1 - latent_sigmas], 0, 1), cmap='Greens')
   plt.clim(vmin=0, vmax=1)
   plt.yticks(ticks=range(latent_dim), labels=latent_names)
   plt.xticks(ticks=[])
@@ -225,9 +230,9 @@ def plot_bottlenecks(params, sort_latents=True, obs_names=None):
   plt.title('Latent Bottlenecks')
 
   plt.subplot(1, 2, 2)
-  plt.imshow(1 - update_sigmas, cmap='Oranges')
+  plt.imshow(1 - update_sigmas, cmap='Greens')
   plt.clim(vmin=0, vmax=1)
-  plt.colorbar()
+  plt.colorbar(orientation='horizontal')
   plt.yticks(ticks=range(latent_dim), labels=latent_names)
   xlabels = np.concatenate((np.array(obs_names), latent_names))
   plt.xticks(
