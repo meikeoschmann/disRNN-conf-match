@@ -13,6 +13,9 @@ import optax
 import time
 import warnings
 import pandas as pd
+from tueplots import bundles, figsizes
+from tueplots.constants import markers
+from tueplots.constants.color import rgb
 
 warnings.filterwarnings("ignore")
 
@@ -307,8 +310,17 @@ def train_model(
 
   # If we actually did any training, print final loss and make a nice plot of the losses and the gradients
   if n_steps > 1 and do_plot:
+    plt.rcParams.update(
+        bundles.icml2022(
+        column="full",
+        nrows=1,
+        ncols=2
+        )
+    )
+    plt.rcParams.update(figsizes.icml2022_half(nrows=3, ncols=1))
+
     #fig, ax = plt.subplots(5, 1, figsize=(10, 50))
-    fig, ax = plt.subplots(3, 1, figsize=(10, 30))
+    fig, ax = plt.subplots(3, 1)
     ax[0].semilogy(training_loss, color='black')
     ax[0].set_xlabel('Training Step')
     ax[0].set_ylabel('Mean Loss')
@@ -316,14 +328,14 @@ def train_model(
     # ax[1].plot(df_latent_inits)
     # ax[1].legend(df_latent_inits.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
     ax[1].plot(df_grads_mean)
-    ax[1].legend(df_grads_mean.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    #ax[1].legend(df_grads_mean.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
     ax[1].set_xlabel('Training Step')
     ax[1].set_ylabel('Mean Gradient')
     #ax[1].set_title('Mean Gradient Latent Inits over Training')
     # ax[2].plot(df_latent_sigmas)
     # ax[2].legend(df_latent_sigmas.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
     ax[2].plot(df_grads_max)
-    ax[2].legend(df_grads_max.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
+    #ax[2].legend(df_grads_max.columns, bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0)
     ax[2].set_xlabel('Training Step')
     ax[2].set_ylabel('Max Gradient')
     #ax[2].set_title('Mean Gradient Latent Sigmas over Training')
