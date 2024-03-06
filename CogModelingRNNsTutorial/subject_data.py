@@ -89,7 +89,21 @@ class SubjectData:
         self.features_prev = [str(col) + '_previous' for col in self.features_prev]
         data_shifted.columns = self.features_prev
         self.data = pd.concat([self.data, data_shifted], axis=1)
-        
+    
+    def extract_trial_indices(self, subject_idx):
+        '''Extract indices of trials with partner 1 and 2 for given subject.
+        Returns: 2 arrays of shape (n_trials, n_blocks)'''
+
+        idx_partner1 = np.ndarray((64,4))
+        idx_partner2 = np.ndarray((64,4))
+
+        for i in range(4):
+            df_block = self.data[self.data['block'] == i+1]
+            idx_partner1[:, i] = np.array(df_block[df_block['subject'] == subject_idx+1]['type']==1)
+            idx_partner2[:, i] = np.array(df_block[df_block['subject'] == subject_idx+1]['type']==2)
+
+        return idx_partner1, idx_partner2
+
 
 def train_test(df, features, target, leave_out_idx=0, batch_size=None):
 
