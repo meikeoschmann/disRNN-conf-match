@@ -90,17 +90,17 @@ class SubjectData:
         data_shifted.columns = self.features_prev
         self.data = pd.concat([self.data, data_shifted], axis=1)
     
-    def extract_trial_indices(self, subject_idx):
+    def extract_trial_indices(self, subject):
         '''Extract indices of trials with partner 1 and 2 for given subject.
         Returns: 2 arrays of shape (n_trials, n_blocks)'''
 
-        idx_partner1 = np.ndarray((64,4))
-        idx_partner2 = np.ndarray((64,4))
+        idx_partner1 = np.zeros((64, 4), dtype=bool)
+        idx_partner2 = np.zeros((64, 4), dtype=bool)
 
         for i in range(4):
             df_block = self.data[self.data['block'] == i+1]
-            idx_partner1[:, i] = np.array(df_block[df_block['subject'] == subject_idx+1]['type']==1)
-            idx_partner2[:, i] = np.array(df_block[df_block['subject'] == subject_idx+1]['type']==2)
+            idx_partner1[:, i] = (df_block[df_block['subject'] == subject]['type'] == 1).values
+            idx_partner2[:, i] = (df_block[df_block['subject'] == subject]['type'] == 2).values
 
         return idx_partner1, idx_partner2
 
@@ -161,10 +161,10 @@ def train_test(df, features, target, leave_out_idx=0, batch_size=None):
 
     return train, test
 
-def single_subject(df, features, target, subject_idx=1, batch_size=None):
+def single_subject(df, features, target, subject=1, batch_size=None):
 
     tr = 3
-    df = df[df['subject'] == subject_idx]
+    df = df[df['subject'] == subject]
     n_blocks = df['block'].unique().size
     n_trials = int(df['trial'].unique().size/n_blocks) 
     df_test = df[df['block'] > tr]
