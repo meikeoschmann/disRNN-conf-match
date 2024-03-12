@@ -219,7 +219,7 @@ def compute_log_likelihood(dataset, model_fun, params):
         n += 1
 
   normalized_likelihood = np.exp(log_likelihood / n)
-
+  print(f'Log Likelihood: {log_likelihood:.1f}')
   print(f'Normalized Likelihood: {100 * normalized_likelihood:.1f}%')
 
   return normalized_likelihood, model_outputs
