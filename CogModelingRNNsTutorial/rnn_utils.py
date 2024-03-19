@@ -190,7 +190,8 @@ def train_model(
       labels: np.ndarray, output_logits: np.ndarray
   ) -> float:
     
-    l2_lambda = 0.5
+    #l2_lambda = 0.5
+    l1_penalty = 0.2
 
     # Mask any errors for which label is negative
     mask = jnp.logical_not(labels < 0)
@@ -206,9 +207,12 @@ def train_model(
     log_liks = one_hot_labels * log_probs
     masked_log_liks = jnp.multiply(log_liks, mask)
 
-    l2_reg = 0.5 * l2_lambda * sum(jnp.sum(jnp.square(param)) for param in jax.tree_leaves(output_logits))
+    #l2_reg = 0.5 * l2_lambda * sum(jnp.sum(jnp.square(param)) for param in jax.tree_leaves(output_logits))
+    l1_reg = l1_penalty * jnp.sum(jnp.abs(output_logits))
     
-    loss = -jnp.nansum(masked_log_liks) + l2_reg
+    # Add regularization penalty to the loss
+    loss = -jnp.nansum(masked_log_liks) + l1_reg
+    #loss = -jnp.nansum(masked_log_liks) + l2_reg
     return loss
 
   def categorical_loss(
