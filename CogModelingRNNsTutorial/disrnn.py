@@ -122,6 +122,7 @@ class HkDisRNN(hk.RNNCore):
     # update_mlp_sigmas: (obs_size + latent_size, latent_size)
     update_mlp_sigmas = self._update_mlp_sigmas * (1 - self._eval_mode)
 
+   
     # update_mlp_inputs: (batch_size, obs_size + latent_size, latent_size)
     update_mlp_inputs = update_mlp_mus + update_mlp_sigmas * jax.random.normal(
         hk.next_rng_key(), update_mlp_mus.shape
@@ -134,6 +135,7 @@ class HkDisRNN(hk.RNNCore):
       penalty += self._beta_scale * kl_gaussian(
           update_mlp_mus[:, :, mlp_i], update_mlp_sigmas[:, mlp_i]
       )
+
       update_mlp_output = hk.nets.MLP(
           self._update_mlp_shape,
           activation=self._activation,
@@ -146,7 +148,7 @@ class HkDisRNN(hk.RNNCore):
       new_latent = w * update + (1 - w) * prev_latents[:, mlp_i]
       #new_latent = prev_latents[:, mlp_i] + update
       new_latents = new_latents.at[:, mlp_i].set(new_latent)
-
+      
     #####################
     # Global Bottleneck #
     #####################
@@ -155,7 +157,7 @@ class HkDisRNN(hk.RNNCore):
         hk.next_rng_key(), new_latents.shape
     )
     penalty += kl_gaussian(new_latents, self._latent_sigmas)
-
+    #jax.debug.breakpoint()
     ###############
     #  CHOICE MLP #
     ###############
