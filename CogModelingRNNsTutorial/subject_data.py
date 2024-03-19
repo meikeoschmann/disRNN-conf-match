@@ -162,15 +162,16 @@ def train_test(df, features, target, leave_out_idx=0, batch_size=None):
     return train, test
 
 def single_subject(df, features, target, subject=1, batch_size=None):
-
+   
     tr = 3
     df = df[df['subject'] == subject]
     n_blocks = df['block'].unique().size
     n_trials = int(df['trial'].unique().size/n_blocks) 
     df_test = df[df['block'] > tr]
     df_train = df[df['block'] <= tr]
+    # df_test = df[df['block'] == 3]
+    # df_train = df[(df['block'] == 1) | (df['block'] == 2) | (df['block'] == 4)]
     n_features = len(features)
-
 
     xsTrain = np.zeros((n_trials, tr, n_features))
     ysTrain = np.zeros((n_trials, tr, 1))
@@ -182,8 +183,15 @@ def single_subject(df, features, target, subject=1, batch_size=None):
         ysTrain[:, i, :] = df_train[df_train['block'] == i+1][target].values
 
     for i in range(tr, n_blocks):
-        xsTest[:, i-tr, :] = df_test[df_test['block'] == i+1][features].values
-        ysTest[:, i-tr, :] = df_test[df_test['block'] == i+1][target].values
+         xsTest[:, i-tr, :] = df_test[df_test['block'] == i+1][features].values
+         ysTest[:, i-tr, :] = df_test[df_test['block'] == i+1][target].values
+
+    # for i, j in enumerate([1, 2, 4]):
+    #     xsTrain[:, i, :] = df_train[df_train['block'] == j][features].values
+    #     ysTrain[:, i, :] = df_train[df_train['block'] == j][target].values
+    
+    # xsTest[:, 0, :] = df_test[df_test['block'] == 3][features].values
+    # ysTest[:, 0, :] = df_test[df_test['block'] == 3][target].values
     
     train = DatasetRNN(xsTrain, ysTrain, batch_size)
     test = DatasetRNN(xsTest, ysTest, batch_size)
